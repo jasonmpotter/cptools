@@ -1,0 +1,17 @@
+#!/bin/bash
+# cPguy Web Installer 1.0
+
+function main {
+
+    local NAME=ez_mailbox_disabler
+    local DIR=/usr/local/bin
+    local STAGE=/usr/local/src
+    local URL=https://cpguy.com/toolchest/
+
+    cd /usr/local/src || return 1
+    wget -O $NAME $URL/$NAME/$NAME.sh || return 2
+    wget -O $NAME.md5sum $URL/$NAME/$NAME.md5sum || return 3
+    md5sum --check $NAME.md5sum || return 4
+}
+
+main $@

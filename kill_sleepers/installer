@@ -1,0 +1,59 @@
+#!/bin/bash
+# cPguy Web Installer 1.1
+
+function handle_main {
+
+    local NAME=kill_sleepers
+    local DIR=/usr/local/cpguy.com/$NAME
+    local STAGE=/usr/local/src
+    local URL=https://cpguy.com/toolchest/
+
+    cd $STAGE || return 10
+    wget -qO $NAME.sh $URL/$NAME/$NAME.sh || return 20
+    wget -qO $NAME.md5sum $URL/$NAME/$NAME.md5sum || return 30 
+    md5sum --check $NAME.md5sum --quiet || return 40 
+    mkdir -p $DIR || return 50
+    chmod +x $NAME.sh $DIR || return 60
+    mv $NAME.sh $DIR || return 70
+    ln -sf $DIR/$NAME.sh /bin/$NAME || return 80
+    echo "*/5 * * * * root /bin/$NAME" > /etc/cron.d/$NAME.cron || return 90
+    return
+}
+
+function handle_error {
+    case $1 in
+     0)
+        echo Install Successful
+        ;;
+    10)
+        echo ERROR:$1 unable to change to STAGE
+        ;;
+    20)
+        echo ERROR:$1 unable to download NAME
+        ;;
+    30)
+        echo ERROR:$1 unable to download MD5
+        ;;
+    40)
+        echo ERROR:$1 checksum failure
+        ;;
+    50)
+        echo ERROR:$1 unable to create STAGE dir
+        ;;
+    60)
+        echo ERROR:$1 chmod unsuccessful
+        ;;
+    70)
+        echo ERROR:$1 unable to move NAME to STAGE
+        ;;
+    80)
+        echo ERROR:$1 failed to create symlink
+        ;;
+    90)
+        echo ERROR:$1 failed to create cron job
+        ;;
+    esac
+}
+
+handle_main
+handle_error $?

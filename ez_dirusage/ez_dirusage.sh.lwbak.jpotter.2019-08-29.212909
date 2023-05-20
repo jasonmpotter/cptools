@@ -1,0 +1,146 @@
+#!/bin/bash
+# Easy Directory Usage https://linkedin.com/in/JasonMPotter
+# Finds large files and directories eating up space on a provided path
+VERSION="1.0.0"
+
+function ez_gethome { # print the home dir of a user or cpanel site
+        local who=$(/scripts/whoowns $1 2>/dev/null)
+        if [[ ! $who ]]; then who=$1; fi
+        homed=$(awk -v "who=$who" -F: '{if ($1==who) print $6;}' /etc/passwd)
+        echo $homed
+}
+export -f ez_gethome
+
+function ez_dirusage { 
+    # Regular Colors
+    export NoColor='\033[m'
+    export Black='\033[0;30m'
+    export Red='\033[0;31m'
+    export Green='\033[0;32m'
+    export Yellow='\033[0;33m'
+    export Blue='\033[0;34m'
+    export Purple='\033[0;35m'
+    export Cyan='\033[0;36m'
+    export White='\033[0;37m'
+    # Bold
+    export BBlack='\033[1;30m'
+    export BRed='\033[1;31m'
+    export BGreen='\033[1;32m'
+    export BYellow='\033[1;33m'
+    export BBlue='\033[1;34m'
+    export BPurple='\033[1;35m'
+    export BCyan='\033[1;36m'
+    export BWhite='\033[1;37m'
+
+    if [[ ! $1 ]]; then
+        echo "syntax: $0 <target1> [[target2] ...]";
+        echo " <target> can be a valid path, system user or valid cpanel hosted domain"
+    fi
+    
+    for i in $@; do 
+        if [[ -e $i ]]; then h=$i; else h=$(ez_gethome $i); fi   
+        if [[ ! -e $h ]]; then
+            echo "'$i' is not a valid directory, system user or domain.tld governed by this host."
+            return
+        fi
+        find $h -xdev -not -iregex "[/](proc|dev)[/].*" -printf "%s|%y|%p|%h\n" | awk -F\|\
+             -v "THRESHOLD=$THRESHOLD"\
+             -v "FILECOUNT=$FILECOUNT"\
+             -v "H=$h"\
+             --source '
+             function FBYTES(i) { b="B";
+                if (i >= 1024) { i=i/1024; b="K";}
+                if (i >= 1024) { i=i/1024; b="M";}
+                if (i >= 1024) { i=i/1024; b="G";}
+                if (i >= 1024) { i=i/1024; b="T";}
+                if (i >= 1024) { i=i/1024; b="P";}
+                return sprintf("%.2f %s",i,b);
+            }
+            function CBYTES(t, color) {
+                color["K"]="'${Green}'";
+                color["M"]="'${Yellow}'";
+                color["G"]="'${Red}'";
+                color["T"]="'${BRed}'";
+                color["P"]="'${Purple}'";
+                return color[t];
+            }
+            function CPCT(i, color) {
+                gsub(/%/,"",i);
+                i+=0;
+                if(i>=100) color="'${BPurple}'";
+                else if(i>=90) color="'${BRed}'";
+                else if(i>=50) color="'${Red}'";
+                else if(i>=20) color="'${Yellow}'";
+                else color="";
+                return color;
+            }
+
+        BEGIN { 
+            NOCOLOR="\033[m"
+            BLACK="\033[0;30m"
+            RED="\033[0;31m"
+            GREEN="\033[0;32m"
+            YELLOW="\033[0;33m"
+            BLUE="\033[0;34m"
+            PURPLE="\033[0;35m"
+            CYAN="\033[0;36m"
+            WHITE="\033[0;37m"
+            BBLACK="\033[1;30m"
+            BRED="\033[1;31m"
+            BGREEN="\033[1;32m"
+            BYELLOW="\033[1;33m"
+            BBLUE="\033[1;34m"
+            BPURPLE="\033[1;35m"
+            BCYAN="\033[1;36m"
+            BWHITE="\033[1;37m"
+
+
+            if (! THRESHOLD) THRESHOLD=.5
+            if (! FILECOUNT) FILECOUNT=1000
+            print "Looking for:";
+            print " dirs/files larger than '$BWhite'"THRESHOLD"%'$NoColor' of total dir size";
+            print " dirs with '$BWhite'"FILECOUNT"'$NoColor' or more files";
+            printf BLUE"Analyzing:" BWHITE H NOCOLOR;
+        }
+        {  
+          split("",out,"");
+          total+=$1;
+          items[$3]+=$1;
+          if ($2 == "f") { dirs[$4]+=1; items[$4]+=$1; } 
+        } 
+        END { 
+            print "('${Yellow}'"FBYTES(total)"'$NoColor')";
+            home_len=7;
+            dsize_len=7;
+            count_len=12;
+            for (i in items) {
+                pct=items[i]/total*100;
+                cnt=dirs[i];
+                if (pct>=THRESHOLD||cnt>=FILECOUNT) {
+                    split(FBYTES(items[i]),o," ");
+                    if (dirs[i]) count=dirs[i]; else count=1;
+                    home=sprintf("%6.2f%%",pct);
+                    dsize=sprintf("%9.2f",o[1]);
+                    out[length(out)+1]=sprintf("%016.6f",pct)items[i]sprintf("%011d",count)"::"home"::"dsize"::"o[2]"::"count"::"i;
+                    if (length(count) > count_len) count_len=length(count)
+                    if (length(home) > home_len) home_len=length(home)
+                    if (length(dsize)+1 > dsize_len) dsize_len=length(dsize)+1
+                }
+            }
+            if (out[1]) {
+                sep=" '${Blue}'|'${NoColor}' ";
+                form=" '${BBlue}'%"home_len"s"sep"'${BBlue}'%"dsize_len"s"sep"'${BBlue}'%"count_len"s"sep"'${BBlue}'%-s'${NoColor}'\n";
+                printf form,"[RSize]","[DSize]","[#Files]","[Directory/File]";
+                n = asort(out);
+                while (n>=1) {
+                    split(out[n],l,"::");
+                    form=CPCT(l[2])"%"home_len"s" sep CBYTES(l[4])"%"dsize_len"s" sep "%\047"count_len"s" sep "%-s\n";
+                    printf(form,l[2],l[3]l[4],l[5],l[6]);
+                    n--;
+                }
+            }
+        }'
+        echo
+    done
+}
+ez_dirusage "$@"
